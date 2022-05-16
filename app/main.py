@@ -1,154 +1,64 @@
-from fastapi import FastAPI
-import game_utils as utils
-from random import randint
-from time import sleep
+from time import sleep 
+import requests
+import utils
 
 
-app = FastAPI()
+def main():
 
-# Game init
-board = utils.create_empty_board()
-# Players   "X"   "O"
-players = [None, None] 
-turn = None
-winner = None
-# Print initial board
-utils.print_board(board)
+    NAME = "Kris"
+    print("\n------- Starting tic-tac-toe bot -------\n")
 
+    # Register phase begins
+    registry_open = utils.is_registry_open()
 
-@app.get("/registry", tags=["tic-tac-toe"])
-def is_registry_open() -> bool:
-    
-    global turn
+    while not registry_open:
+        print("Waiting for registry to open...\n")
+        sleep(5)
+        registry_open = utils.is_registry_open()
 
-    if turn is None:
-        print("Current players:", players)
-        return True
-    
-    print("Current players:", players)
-    return False
+    # Register is open now, let's register as player
+    PLAYER_ID = utils.register_user(NAME)
+    print("Registered successfully as {}, player ID is: {}\n".format(NAME, PLAYER_ID))
+    sleep(2)
 
+    # Game-continues flag, set to True until there's a winner
+    game_continues = utils.does_game_continue()
 
-@app.post("/register_player/{name}", tags=["tic-tac-toe"])
-def register_player(name: str) -> any:
+    while game_continues:
 
-    global players, turn
-    x = players[0]
-    o = players[1]
-  
-    if x is None and o is None:
-
-        symbol = randint(0,1)
-        players[symbol] = name
-
-        if symbol == 0:
-            print("Current players:", players)
-            return "X"
+        my_turn = utils.is_my_turn(PLAYER_ID)
         
-        print("Current players:", players)
-        return "O"
+        # Flag to waiti for our turn
+        while not my_turn:
+            print("Waiting for turn...")
+            sleep(5)
+            my_turn = utils.is_my_turn(PLAYER_ID)
 
-    if x is None:
-        players[0] = name
-        print("Current players:", players)
+        # It's our turn, start by reading the latest version of the board
+        board = utils.read_board()
+        utils.print_board(board)
 
-        if players[0] is not None and players[1] is not None:
-            # Both players are ready to play, turn is set to "X"
-            turn = "X"
-            print("Current turn:", turn)
+        # Entering cycle of deciding-validating our next move
+        valid_move = False
 
-        return "X"
+        while not valid_move:
 
-    if o is None: 
-        players[1] = name
-        print("Current players:", players)
+            print("Deciding move...\n")
+            sleep(1)
+            next_move = utils.decide_move(board, PLAYER_ID)
+            valid_move = utils.validate_move(board, next_move) # Validates next move
 
-        if players[0] is not None and players[1] is not None:
-            # Both players are ready to play, turn is set to "X"          
-            turn = "X"
-            print("Current turn:", turn)
+        print("Move to send, row: {}, col: {}\n".format(next_move[0], next_move[1]))
 
-        return "O"
+        # Send move to API and check if game continues
+        utils.send_move(PLAYER_ID, next_move)
 
-    return None
+        # Wait and update game_continues flag
+        sleep(5)
+        game_continues = utils.does_game_continue()
 
+    # Game ends, check API for winner
+    print("GAME OVER\nCheck API for winner.")
 
-@app.get("/turn/{player_id}", tags=["tic-tac-toe"])
-def get_player_turn(player_id: str) -> bool:
-    
-    global turn
-    print("Current turn:", turn)
-    
-    if player_id == "X" and turn == "X":
-        return True
-    
-    if player_id == "O" and turn == "O":
-        return True
-
-    return False
-
-
-@app.get("/board", tags=["tic-tac-toe"])
-def get_board():
-
-    global board
-
-    board_string = board[0][0] + board[0][1] + board[0][2] \
-                    + board[1][0] + board[1][1] + board[1][2] \
-                    + board[2][0] + board[2][1] + board[2][2]
-
-    return board_string
-
-
-@app.post("/move/{player_id}/{row}/{column}", tags=["tic-tac-toe"])
-def make_move(player_id: str, row: int, column: int) -> bool:
-    
-    global board, turn, winner
-    # Updates board with move received
-    board = utils.update_board(board, player_id, row, column)
-    # Prints new board
-    utils.print_board(board)
-    # Checks for any winner
-    x_has_won = utils.check_for_winner(board, "X")
-    o_has_won = utils.check_for_winner(board, "O")
-    
-    if x_has_won or o_has_won:
-
-        if x_has_won:
-            winner = "X"
-            turn = None
-            print("\n\nGAME OVER, winner: X\n\n")
-        else:
-            winner = "O"
-            turn = None
-            print("\n\nGAME OVER, winner: O\n\n")
-
-    #Changes current turn
-    if turn == "X":
-        turn = "O"
-    elif turn == "O":
-        turn = "X"
-
-    print("Current turn:", turn)
-    return True
-        
-
-@app.get("/winner/{player_id}", tags=["tic-tac-toe"])
-def get_winner(player_id: str) -> bool:
-
-    global board
-
-    is_winner = utils.check_for_winner(board, player_id)
-
-    return is_winner
-
-
-@app.get("/continue", tags=["tic-tac-toe"])
-def does_game_continue():
-
-    global winner 
-
-    if winner is None:
-        return True 
-    
-    return False
+if __name__ == '__main__':
+    main()
